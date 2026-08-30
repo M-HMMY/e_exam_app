@@ -1,0 +1,6 @@
+# 改行コードを LF に統一する（Windows で編集しても警告が出ないようにする）
+* text=auto eol=lf
+*.png binary
+*.ico binary
+# ランチャは Windows PowerShell が日本語を正しく読めるよう BOM 付き UTF-8 のまま扱う
+*.ps1 -text
