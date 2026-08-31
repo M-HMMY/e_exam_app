@@ -129,6 +129,8 @@ export default function ConfusionWidget(): JSX.Element {
         <strong>適合率と再現率は綱引きの関係</strong>です。陽性と答える基準をゆるめれば FN が減って再現率が上がり、
         代わりに FP が増えて適合率が下がります。F 値はその 2 つの調和平均で、
         <strong>算術平均ではありません</strong>（片方が極端に低いと F 値も低くなります）。
+        <br />
+        特異度は TN /(TN + FP)、<strong>実際に陰性のものを陰性と言えた割合</strong>です。再現率の「陰性版」にあたり、ROC 曲線の横軸（偽陽性率）は 1 − 特異度です。
       </p>
     </>
   );

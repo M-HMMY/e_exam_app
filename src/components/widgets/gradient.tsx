@@ -106,7 +106,7 @@ export default function GradientWidget(): JSX.Element {
           </span>
         </div>
         <div className="out-item">
-          <span className="out-label">1 回で縮む割合</span>
+          <span className="out-label">1 回で掛かる倍率</span>
           <span className="out-value">{Math.abs(1 - 2 * lr).toFixed(2)} 倍</span>
         </div>
       </div>
@@ -117,13 +117,21 @@ export default function GradientWidget(): JSX.Element {
           <>
             いまの学習率では同じ側からゆっくり近づきます。小さすぎると<strong>いつまでも谷に着きません</strong>。
           </>
+        ) : lr === 0.5 ? (
+          <>
+            倍率がちょうど 0 なので、<strong>1 回で谷の底に着きます</strong>。この関数に限った特別な値です。
+          </>
         ) : lr < 1 ? (
           <>
             いまの学習率では<strong>反対側へ行き過ぎながら</strong>近づきます。振動しつつ収束する状態です。
           </>
+        ) : lr === 1 ? (
+          <>
+            倍率がちょうど 1 なので、<strong>同じ幅を往復し続けて収束も発散もしません</strong>。
+          </>
         ) : (
           <>
-            いまの学習率では倍率が 1 以上なので、<strong>行き過ぎが毎回大きくなって発散します</strong>。
+            いまの学習率では倍率が 1 を超えるので、<strong>行き過ぎが毎回大きくなって発散します</strong>。
             {diverged ? '実際に x が離れていくのが見えます。' : ''}
           </>
         )}

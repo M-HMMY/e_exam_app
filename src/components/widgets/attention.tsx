@@ -10,15 +10,16 @@ import { useState, type JSX } from 'react';
 export const widgetId = 'attention';
 
 const WORDS = ['猫', 'が', '魚', 'を'];
-const DIM = 4;
-
-// 「猫」と「魚」が似た向き、「が」と「を」が似た向き、という作り物のベクトル
-const VECTORS: number[][] = [
-  [1.0, 0.2, 0.9, 0.1],
-  [0.1, 1.0, 0.0, 0.9],
-  [0.9, 0.1, 1.0, 0.2],
-  [0.0, 0.9, 0.1, 1.0],
+// 次元を小さくしすぎると、√d で割るかどうかの差が画面に出ない（d = 4 では内積が 2 弱にしかならない）。
+// 4 次元のパターンを 4 回繰り返して 16 次元にし、実際に尖り方が変わるようにしている。
+const BASE: number[][] = [
+  [1.0, 0.2, 0.9, 0.1], // 猫
+  [0.1, 1.0, 0.0, 0.9], // が
+  [0.9, 0.1, 1.0, 0.2], // 魚
+  [0.0, 0.9, 0.1, 1.0], // を
 ];
+const VECTORS: number[][] = BASE.map((v) => [...v, ...v, ...v, ...v]);
+const DIM = VECTORS[0].length;
 
 const dot = (a: number[], b: number[]): number => a.reduce((s, v, i) => s + v * b[i], 0);
 
@@ -35,6 +36,8 @@ export default function AttentionWidget(): JSX.Element {
   const output = Array.from({ length: DIM }, (_, d) =>
     weights.reduce((s, w, i) => s + w * VECTORS[i][d], 0),
   );
+  // 自分自身との内積はいつも最大になるので、見るべきはその次
+  const otherBest = weights.reduce((best, w, i) => (i !== q && w > weights[best] ? i : best), q === 0 ? 1 : 0);
 
   return (
     <>
@@ -90,8 +93,8 @@ export default function AttentionWidget(): JSX.Element {
           <span className="out-value">{weights.reduce((a, b) => a + b, 0).toFixed(3)}</span>
         </div>
         <div className="out-item">
-          <span className="out-label">いちばん見た語</span>
-          <span className="out-value">{WORDS[weights.indexOf(Math.max(...weights))]}</span>
+          <span className="out-label">自分以外でいちばん見た語</span>
+          <span className="out-value">{WORDS[otherBest]}</span>
         </div>
         <div className="out-item">
           <span className="out-label">出力ベクトル</span>
@@ -103,11 +106,12 @@ export default function AttentionWidget(): JSX.Element {
 
       <p className="widget-note">
         重みは<strong>ソフトマックスの出力なので、足すと必ず 1</strong> になります。
-        「猫」をクエリにすると意味の近い「魚」の重みが上がり、「が」をクエリにすると「を」が上がります。
+        <strong>自分自身との内積がいちばん大きくなるのは当たり前</strong>なので、見るべきはその次です。
+        「猫」をクエリにすると意味の近い「魚」が、「が」をクエリにすると「を」が上がります。
         <strong>近い向きのベクトルほど内積が大きくなる</strong>、それだけの仕掛けです。
         <br />
         チェックを外すと √d で割らなくなり、スコアの差がそのままソフトマックスに入ります。
-        <strong>重みが 1 点に集中して尖る</strong>のが分かります。次元が大きいほど内積は大きくなりがちなので、
+        <strong>関係のない語の重みがほぼ 0 になり、分布が極端に尖る</strong>のが分かります。次元が大きいほど内積は大きくなりがちなので、
         割らないと勾配がほとんど流れなくなります。
       </p>
     </>

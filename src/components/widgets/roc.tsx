@@ -37,7 +37,8 @@ export default function RocWidget(): JSX.Element {
 
   const curve: string[] = [];
   for (let i = 0; i <= 100; i++) {
-    const t = 5 - (i / 100) * 10; // しきい値を高い方から下げていく
+    // 分離度が大きいと、しきい値 5 でもまだ TPR が 0 に落ちない。上端を分離度に合わせる
+    const t = separation + 5 - (i / 100) * (separation + 10);
     curve.push(`${i === 0 ? 'M' : 'L'}${sx(1 - phi(t)).toFixed(1)},${sy(1 - phi(t - separation)).toFixed(1)}`);
   }
 
@@ -72,7 +73,7 @@ export default function RocWidget(): JSX.Element {
           className="slider"
           type="range"
           min="-3"
-          max="5"
+          max={separation + 4}
           step="0.1"
           value={threshold}
           onChange={(e) => setThreshold(Number(e.target.value))}

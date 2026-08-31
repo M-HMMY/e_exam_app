@@ -50,7 +50,8 @@ export default function DistributionWidget(): JSX.Element {
     variance = n * p * (1 - p);
     note = 'コインを n 回投げて表が何回出るか。1 回だけならベルヌーイ分布で、二項分布の n = 1 の場合にあたる。';
   } else if (kind === 'poisson') {
-    const upper = Math.max(8, Math.ceil(lambda * 3));
+    // λ が大きいと棒が増えすぎて画面からあふれるので上限を置く
+    const upper = Math.min(16, Math.max(8, Math.ceil(lambda * 2.5)));
     labels = Array.from({ length: upper + 1 }, (_, k) => String(k));
     values = labels.map((_, k) => poissonPmf(lambda, k));
     mean = lambda;
@@ -151,7 +152,7 @@ export default function DistributionWidget(): JSX.Element {
         )}
       </div>
 
-      <div className="bar-chart">
+      <div className="bar-chart" role="img" aria-label="確率分布の棒グラフ">
         {values.map((v, i) => (
           <div className="bar-col" key={labels[i]}>
             <div className="bar" style={{ height: `${Math.max(1, (v / max) * 88)}%`, flexShrink: 0 }} />
