@@ -87,7 +87,18 @@ for (const d of DRILLS) {
 // ---- 本文の記法 ----
 const KNOWN_DIAGRAMS = new Set(['flow', 'stack', 'tree', 'matrix', 'cycle', 'seq', 'bits', 'compare']);
 /** ```widget: で呼べるウィジェットの id。src/components/widgets/*.tsx のファイル名 */
-const KNOWN_WIDGETS = new Set<string>(['activation', 'softmax', 'convsize']);
+const KNOWN_WIDGETS = new Set<string>([
+  'activation',
+  'softmax',
+  'convsize',
+  'matmul',
+  'entropy',
+  'distribution',
+  'gradient',
+  'attention',
+  'confusion',
+  'roc',
+]);
 /** 本文リンクで飛べるページ（ハッシュルータの第 1 要素） */
 const KNOWN_PAGES = new Set([
   'home',

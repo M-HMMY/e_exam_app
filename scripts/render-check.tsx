@@ -1,7 +1,19 @@
+import type { ComponentType } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Markdown } from '../src/lib/markdown';
 import { SECTIONS } from '../src/data/textbook';
 import { QUESTIONS } from '../src/data/questions';
+import { DRILLS } from '../src/data/drills';
+import ActivationWidget from '../src/components/widgets/activation';
+import SoftmaxWidget from '../src/components/widgets/softmax';
+import ConvSizeWidget from '../src/components/widgets/convsize';
+import MatMulWidget from '../src/components/widgets/matmul';
+import EntropyWidget from '../src/components/widgets/entropy';
+import DistributionWidget from '../src/components/widgets/distribution';
+import GradientWidget from '../src/components/widgets/gradient';
+import AttentionWidget from '../src/components/widgets/attention';
+import ConfusionWidget from '../src/components/widgets/confusion';
+import RocWidget from '../src/components/widgets/roc';
 
 /**
  * 実際に描いてみて、画面に出てはいけないものが残っていないかを見る検査。
@@ -10,10 +22,27 @@ import { QUESTIONS } from '../src/data/questions';
  * 型でも記法の検査でも捕まらない崩れ方が実際にあった。
  *   - `$...$` が強調の中にあると数式にならず、$ ごと画面に出ていた
  *   - `\mathbf{x}` の波かっこが記号にならず `{x}` と出ていた
- * どちらも「描いてみれば一目で分かる」たぐいなので、機械にやらせる。
+ *   - ウィジェットの入力欄に NaN が入り込み、画面に NaN と出ていた
+ * どれも「描いてみれば一目で分かる」たぐいなので、機械にやらせる。
+ *
+ * 計算ドリルは値が毎回変わるので、何度か引いて確かめる。
  */
 
 const BACKSLASH = String.fromCharCode(92);
+
+/** ウィジェットは import.meta.glob 経由だと check から読めないので、ここに直接並べる */
+const WIDGETS: [string, ComponentType][] = [
+  ['activation', ActivationWidget],
+  ['softmax', SoftmaxWidget],
+  ['convsize', ConvSizeWidget],
+  ['matmul', MatMulWidget],
+  ['entropy', EntropyWidget],
+  ['distribution', DistributionWidget],
+  ['gradient', GradientWidget],
+  ['attention', AttentionWidget],
+  ['confusion', ConfusionWidget],
+  ['roc', RocWidget],
+];
 
 /** 数式として描かれた部分だけを取り出す */
 function mathTexts(html: string): string[] {
@@ -50,5 +79,29 @@ export function renderCheck(): string[] {
     inspect(`問題 ${q.id}`, q.explanation, problems);
     q.choices.forEach((c) => inspect(`問題 ${q.id}`, c, problems));
   }
-  return problems;
+  for (const d of DRILLS) {
+    for (let i = 0; i < 40; i++) {
+      const item = d.generate();
+      inspect(`ドリル ${d.id}`, item.question, problems);
+      inspect(`ドリル ${d.id}`, item.explanation, problems);
+      item.choices.forEach((c) => inspect(`ドリル ${d.id}`, c, problems));
+    }
+  }
+  for (const [id, Component] of WIDGETS) {
+    let html = '';
+    try {
+      html = renderToStaticMarkup(<Component />);
+    } catch (e) {
+      problems.push(`ウィジェット ${id}: 描画に失敗した → ${String(e).slice(0, 80)}`);
+      continue;
+    }
+    // ウィジェットは JSX なので Markdown 記法は効かない。$...$ を書いても数式にならない
+    if (html.includes('$')) problems.push(`ウィジェット ${id}: $ が数式にならずそのまま出ている`);
+    if (html.includes('**')) problems.push(`ウィジェット ${id}: ** が強調にならずそのまま出ている`);
+    if (html.includes('NaN')) problems.push(`ウィジェット ${id}: NaN が画面に出ている`);
+    if (html.includes('Infinity')) problems.push(`ウィジェット ${id}: Infinity が画面に出ている`);
+    if (html.includes('undefined')) problems.push(`ウィジェット ${id}: undefined が画面に出ている`);
+  }
+  // 同じ崩れを何度も報告しても仕方がないのでまとめる
+  return [...new Set(problems)];
 }
