@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react';
+import { useState, type JSX, type ReactNode } from 'react';
 
 /**
  * 節の中に置く一問一答。
@@ -28,7 +28,15 @@ function parse(source: string): Item[] {
   return items;
 }
 
-export function SelfCheck({ source }: { source: string }): JSX.Element | null {
+export function SelfCheck({
+  source,
+  render,
+}: {
+  source: string;
+  /** 問いと答えのインライン記法（数式・コード表記）を描く。Markdown レンダラから渡される */
+  render?: (text: string, key: string) => ReactNode;
+}): JSX.Element | null {
+  const draw = (text: string, key: string): ReactNode => (render ? render(text, key) : text);
   const items = parse(source);
   const [open, setOpen] = useState<Set<number>>(new Set());
 
@@ -65,9 +73,9 @@ export function SelfCheck({ source }: { source: string }): JSX.Element | null {
               <span className="selfcheck-mark" aria-hidden>
                 {open.has(i) ? '−' : '+'}
               </span>
-              <span>{it.q}</span>
+              <span>{draw(it.q, `q${i}`)}</span>
             </button>
-            {open.has(i) && <p className="selfcheck-a">{it.a}</p>}
+            {open.has(i) && <p className="selfcheck-a">{draw(it.a, `a${i}`)}</p>}
           </li>
         ))}
       </ol>

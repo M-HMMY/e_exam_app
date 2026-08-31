@@ -61,7 +61,9 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
         </button>,
       );
     } else if (token.startsWith('**')) {
-      nodes.push(<strong key={`${keyPrefix}-b${i}`}>{token.slice(2, -2)}</strong>);
+      // 強調の中にも数式やコード表記が入る（**$\sum$ を for と読む** のような書き方をする）。
+      // 正規表現の都合で中身に ** は現れないため、再帰しても入れ子にはならない。
+      nodes.push(<strong key={`${keyPrefix}-b${i}`}>{inline(token.slice(2, -2), `${keyPrefix}-b${i}`)}</strong>);
     } else {
       nodes.push(<code key={`${keyPrefix}-c${i}`}>{token.slice(1, -1)}</code>);
     }
@@ -136,7 +138,7 @@ export function Markdown({ source }: { source: string }): JSX.Element {
         continue;
       }
       if (lang === 'quiz') {
-        out.push(<SelfCheck key={k()} source={buf.join('\n')} />);
+        out.push(<SelfCheck key={k()} source={buf.join('\n')} render={(text, id) => inline(text, id)} />);
         continue;
       }
       if (lang.startsWith('widget:')) {

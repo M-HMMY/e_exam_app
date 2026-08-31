@@ -9,6 +9,8 @@ import { CATEGORIES } from '../src/data/categories';
 import { SECTIONS } from '../src/data/textbook';
 import { QUESTIONS } from '../src/data/questions';
 import { DRILLS } from '../src/data/drills';
+import { isKnownCommand } from '../src/lib/mathSymbols';
+import { renderCheck } from './render-check';
 
 const BACKSLASH = String.fromCharCode(92);
 const LF = String.fromCharCode(10);
@@ -85,7 +87,7 @@ for (const d of DRILLS) {
 // ---- 本文の記法 ----
 const KNOWN_DIAGRAMS = new Set(['flow', 'stack', 'tree', 'matrix', 'cycle', 'seq', 'bits', 'compare']);
 /** ```widget: で呼べるウィジェットの id。src/components/widgets/*.tsx のファイル名 */
-const KNOWN_WIDGETS = new Set<string>([]);
+const KNOWN_WIDGETS = new Set<string>(['activation', 'softmax', 'convsize']);
 /** 本文リンクで飛べるページ（ハッシュルータの第 1 要素） */
 const KNOWN_PAGES = new Set([
   'home',
@@ -138,6 +140,35 @@ for (const s of SECTIONS) {
   if (open !== null) err(`教本 ${s.id}: 閉じていないコードフェンス（${open || '言語指定なし'}）`);
 }
 
+// ---- 図の中の書式 ----
+// 図は Markdown を通らないので、`**強調**` を書くとアスタリスクがそのまま出る。
+// compare は「1 行 1 セル、偶数行が左・奇数行が右」なので、要素が奇数だと対にならない。
+const DIRECTIVE_KEYS = new Set(['title', 'top', 'bottom', 'x', 'y', 'note', 'actors', 'caption']);
+for (const s of SECTIONS) {
+  let type: string | null = null;
+  let items = 0;
+  for (const raw of s.body.split(LF)) {
+    const t = raw.trim();
+    if (t.startsWith('```')) {
+      if (type !== null) {
+        if (type === 'compare' && items % 2 === 1) {
+          err(`教本 ${s.id}: compare の要素が奇数個なので左右が対にならない（1 行 1 セルで書く）`);
+        }
+        type = null;
+      } else if (t.startsWith('```diagram:')) {
+        type = t.slice('```diagram:'.length);
+        items = 0;
+      }
+      continue;
+    }
+    if (type === null || t === '') continue;
+    const m = /^([a-z]+):/.exec(t);
+    if (m && DIRECTIVE_KEYS.has(m[1])) continue;
+    items++;
+    if (t.includes('**')) err(`教本 ${s.id}: 図の中の ** は強調にならずそのまま出る → ${t.slice(0, 40)}`);
+  }
+}
+
 // ---- 本文リンクの飛び先 ----
 const linkRe = /\[[^\]]+\]\(([^)\s]+)\)/g;
 for (const s of SECTIONS) {
@@ -166,10 +197,28 @@ const COMMANDS = [
   'times', 'cdot', 'approx', 'propto', 'hat', 'bar', 'mathbf', 'mathbb', 'mid',
 ];
 const mathSpan = /\$([^$\n]+)\$/g;
-const checkMath = (label: string, text: string): void => {
+const cmdRe = /\\([A-Za-z]+)/g;
+
+/** 本文から数式の断片を集める（行内の `$...$` と ```math フェンスの中身） */
+function mathPieces(text: string): string[] {
+  const pieces: string[] = [];
   let m: RegExpExecArray | null;
-  while ((m = mathSpan.exec(text)) !== null) {
-    const expr = m[1];
+  mathSpan.lastIndex = 0;
+  while ((m = mathSpan.exec(text)) !== null) pieces.push(m[1]);
+  let inMath = false;
+  for (const line of text.split(LF)) {
+    const t = line.trim();
+    if (t.startsWith('```')) {
+      inMath = t === '```math';
+      continue;
+    }
+    if (inMath && t !== '') pieces.push(t);
+  }
+  return pieces;
+}
+
+const checkMath = (label: string, text: string): void => {
+  for (const expr of mathPieces(text)) {
     for (const cmd of COMMANDS) {
       const at = expr.indexOf(cmd);
       if (at < 0) continue;
@@ -180,6 +229,14 @@ const checkMath = (label: string, text: string): void => {
       if (/[A-Za-z]/.test(before) || /[A-Za-z]/.test(after)) continue;
       warn(`${label}: 数式の ${cmd} にバックスラッシュがない（$ の中で ${BACKSLASH}${BACKSLASH}${cmd} と書く）→ ${expr}`);
     }
+    // 表に無い命令は、記号にならずに名前がそのまま画面へ出る
+    cmdRe.lastIndex = 0;
+    let c: RegExpExecArray | null;
+    while ((c = cmdRe.exec(expr)) !== null) {
+      if (!isKnownCommand(c[1])) {
+        err(`${label}: 数式に未知の命令 ${BACKSLASH}${c[1]}（記号にならず名前が表示される。src/lib/mathSymbols.ts に足すこと）→ ${expr}`);
+      }
+    }
   }
 };
 for (const s of SECTIONS) checkMath(`教本 ${s.id}`, s.body);
@@ -188,6 +245,10 @@ for (const q of QUESTIONS) {
   checkMath(`問題 ${q.id}`, q.explanation);
   q.choices.forEach((c) => checkMath(`問題 ${q.id}`, c));
 }
+
+// ---- 実際に描いてみる ----
+// 記法としては正しくても、描くと崩れている場合がある（強調の中の数式など）。
+for (const p of renderCheck()) err(p);
 
 // ---- 集計して表示 ----
 const sectionsPerCategory = new Map<string, number>();

@@ -2639,6 +2639,40 @@ textarea {
   padding: 0 0.3em;
 }
 
+/* 装飾命令（\mathbf など）。中身の見た目だけを変える */
+.math .mbf {
+  font-weight: 700;
+}
+
+.math .mbb {
+  font-weight: 600;
+  font-style: normal;
+}
+
+.math .mcal {
+  font-family: 'Segoe UI Symbol', 'Apple Symbols', serif;
+  font-style: italic;
+}
+
+.math .mrm {
+  font-style: normal;
+}
+
+.math .mit {
+  font-style: italic;
+}
+
+/* 根号：記号のあとの中身に上線を引く */
+.math .sqrt-body {
+  border-top: 1px solid currentColor;
+  padding: 0 0.1em;
+}
+
+/* bar 系の命令 などで中身が 1 文字に収まらなかった場合の代替表示 */
+.math .accent {
+  text-decoration: overline;
+}
+
 .math-block {
   margin: 14px 0;
   padding: 12px 14px;

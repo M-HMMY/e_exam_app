@@ -1,14 +1,19 @@
 import type { JSX, ReactNode } from 'react';
+import { ACCENT, DECORATION, FUNCTION, SYMBOL } from './mathSymbols';
 
 /**
  * 依存を増やさずに済ませるための、ごく軽い数式表示。
  *
  * 本文では `$...$`（行内）と ```math フェンス（別行立て）で書く。扱うのは次だけ。
  *   - `^{...}` `_{...}` … 上付き・下付き（1 文字なら波かっこを省ける: `x^2`, `w_i`）
- *   - `\alpha` などのバックスラッシュ命令 … 下の SYMBOL 表にある記号に置換
- *   - `\frac{a}{b}` … 横線付きの分数
+ *   - `\alpha` などのバックスラッシュ命令 … mathSymbols.ts の表にある記号に置換
+ *   - `\mathbf{x}` `\mathrm{d}` … 中身の見た目を変える（太字・立体）
+ *   - `\hat{y}` `\bar{x}` … 中身の上に記号を重ねる
+ *   - `\log` `\max` などの関数名 … 立体で表示して変数と区別する
+ *   - `\frac{a}{b}` `\sqrt{x}` … 分数・根号
  *   - それ以外の文字はそのまま（変数はイタリック体で表示される）
  *
+ * **表に無い命令は名前がそのまま画面に出る。** これは `npm run check` が警告する。
  * KaTeX を入れれば表現力は上がるが、この試験で必要な式は上の範囲でほぼ書ける。
  * 行列や総和の添字が積み上がる式など、どうしても足りない場合だけ図（```diagram:matrix）に逃がす。
  * 表現力が足りなくなったら KaTeX への差し替えを検討すること（この関数の置き換えだけで済む）。
@@ -16,26 +21,6 @@ import type { JSX, ReactNode } from 'react';
 
 /** バックスラッシュそのもの。リテラルで書くと編集経路によって壊れやすいので定数にする */
 const BACKSLASH = String.fromCharCode(92);
-
-const SYMBOL: Record<string, string> = {
-  alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', varepsilon: 'ε',
-  zeta: 'ζ', eta: 'η', theta: 'θ', iota: 'ι', kappa: 'κ', lambda: 'λ', mu: 'μ',
-  nu: 'ν', xi: 'ξ', pi: 'π', rho: 'ρ', sigma: 'σ', tau: 'τ', phi: 'φ', chi: 'χ',
-  psi: 'ψ', omega: 'ω',
-  Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ', Lambda: 'Λ', Xi: 'Ξ', Pi: 'Π',
-  Sigma: 'Σ', Phi: 'Φ', Psi: 'Ψ', Omega: 'Ω',
-  sum: '∑', prod: '∏', int: '∫', partial: '∂', nabla: '∇', infty: '∞',
-  times: '×', cdot: '·', div: '÷', pm: '±', mp: '∓',
-  le: '≤', ge: '≥', ne: '≠', approx: '≈', equiv: '≡', propto: '∝', sim: '∼',
-  in: '∈', notin: '∉', subset: '⊂', subseteq: '⊆', cup: '∪', cap: '∩',
-  forall: '∀', exists: '∃', emptyset: '∅',
-  to: '→', rightarrow: '→', leftarrow: '←', mapsto: '↦', Rightarrow: '⇒',
-  odot: '⊙', otimes: '⊗', oplus: '⊕', star: '⋆', ast: '∗',
-  sqrt: '√', angle: '∠', perp: '⊥', parallel: '∥',
-  ldots: '…', cdots: '⋯', vdots: '⋮', ddots: '⋱',
-  hat: '^', bar: '‾', tilde: '~', prime: '′',
-  mathbb: '', mathbf: '', mathrm: '', text: '', left: '', right: '',
-};
 
 /** `{...}` を対応を数えて取り出す。開き波かっこの位置を渡す */
 function takeGroup(src: string, open: number): { body: string; end: number } {
@@ -91,9 +76,61 @@ function render(src: string, keyPrefix: string): ReactNode[] {
           i = den.end;
           continue;
         }
+        if (name === 'sqrt') {
+          // \sqrt{中身}。中身に上線を引いて根号の下にあることを示す
+          const arg = takeArg(src, i);
+          flush();
+          out.push(
+            <span className="sqrt" key={`${keyPrefix}-q${n++}`}>
+              √<span className="sqrt-body">{render(arg.body, `${keyPrefix}-q${n}b`)}</span>
+            </span>,
+          );
+          i = arg.end;
+          continue;
+        }
+        const deco = DECORATION[name];
+        if (deco !== undefined) {
+          // \mathbf{x} のような装飾命令は、中身だけをその見た目で出す
+          const arg = takeArg(src, i);
+          flush();
+          out.push(
+            <span className={deco} key={`${keyPrefix}-d${n++}`}>
+              {render(arg.body, `${keyPrefix}-d${n}b`)}
+            </span>,
+          );
+          i = arg.end;
+          continue;
+        }
+        const accent = ACCENT[name];
+        if (accent !== undefined) {
+          // \hat{y} は中身の直後に結合文字を置いて重ねる。
+          // 結合文字は直前の 1 文字にしか掛からないので、中身が 1 文字に潰れたときだけ重ねる。
+          const arg = takeArg(src, i);
+          const inner = render(arg.body, `${keyPrefix}-a${n}b`);
+          if (inner.length === 1 && typeof inner[0] === 'string') {
+            plain += inner[0] + accent;
+          } else {
+            flush();
+            out.push(
+              <span className="accent" key={`${keyPrefix}-a${n++}`}>
+                {inner}
+              </span>,
+            );
+          }
+          i = arg.end;
+          continue;
+        }
+        if (FUNCTION.has(name)) {
+          flush();
+          out.push(
+            <span className="mrm" key={`${keyPrefix}-o${n++}`}>
+              {name}
+            </span>,
+          );
+          continue;
+        }
         const sym = SYMBOL[name];
         if (sym !== undefined) {
-          // \mathbf{x} のような装飾命令は中身だけ残す
           plain += sym;
           continue;
         }
