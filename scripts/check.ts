@@ -308,10 +308,16 @@ function warnGroup(label: string, items: string[], show = 10): void {
       const lens = q.choices.map(width);
       const other = Math.max(...lens.filter((_, i) => i !== q.answer));
       const mine = lens[q.answer];
+      // **比で測ってはいけない。** 以前の「1.3 倍かつ 6 字差」では、
+      // 長い選択肢どうしの 40 字 / 34 字が 1.18 倍にしかならず素通りする。
+      // そうして漏れたものが積み上がり、このアプリでは 200 問のうち 62 問で
+      // 正解が最長になっていた（長さの分布から計算した期待値の 3.6 倍）。
+      // 受験者がやるのは比の計算ではなく見比べなので、**字数の差**で見る。
+      // 以下は入れ替える前の根拠：
       // 閾値の根拠：1.5 倍では緩く、レビューで指摘されたものは 1.35 倍前後に
       // 集中していた。24 字の下限は、短い選択肢どうしで比が暴れるのを防ぐため
       // （「13 字 / 5 字」で 2.6 倍になってしまう）。5 本の姉妹アプリで同じ値。
-      if (mine >= 24 && mine >= other * 1.3 && mine - other >= 6) {
+      if (mine - other >= 5) {
         found.push({ diff: mine - other, msg: `問題 ${q.id}: 正解 ${mine} 字 / 最長の誤答 ${other} 字` });
       }
     }
@@ -320,17 +326,37 @@ function warnGroup(label: string, items: string[], show = 10): void {
   }
 
   // 「必ず」「常に」が誤答にしか出てこないと、それ自体が手掛かりになる。
+  //
+  // **「3 つすべて」では緩すぎた。** 2 つ消去できれば残りは二択になり、
+  // それだけで正答率が 25 % から 50 % に上がる。2 つ以上で数える。
+  //
+  // 「すべて」は数え方が難しい。「すべての入力に対して」のようなただの記述まで
+  // 拾ってしまうので、断定を強める語だけを見る。
+  // 「常に」は部分一致だと「非常に」「通常に」まで拾ってしまうので、直前の字で除く
+  // （「局所最適解が非常に多く」を誤って拾ったことがある）。
   {
-    const absolute = /必ず|すべて|常に|まったく|一切|絶対|例外なく|いかなる場合|どのような場合|一律/;
+    const absolute = /必ず|(?<![非通日])常に|まったく|全く|一切|絶対|例外なく|いかなる場合|どのような場合|どんな場合|一律|あらゆる/;
     const found: string[] = [];
     for (const q of own) {
       if (q.choices.length !== 4) continue;
-      const wrongAllHave = q.choices.every((c, i) => i === q.answer || absolute.test(c));
-      if (wrongAllHave && !absolute.test(q.choices[q.answer])) {
-        found.push(`問題 ${q.id}: 誤答 3 つすべてに言い切りがあり、正解にはない`);
+      const wrong = q.choices.filter((_, i) => i !== q.answer).filter((c) => absolute.test(c)).length;
+      if (wrong >= 2 && !absolute.test(q.choices[q.answer])) {
+        found.push(`問題 ${q.id}: 誤答 ${wrong} つに言い切りがあり、正解にはない`);
       }
     }
     warnGroup('言い切りが誤答側にだけ出ている', found);
+  }
+
+  // 「本文で挙げられているものはどれか」は、知識ではなく直前の記載を覚えているかを
+  // 問う形になっていて、教本を閉じた受験者には答えようがない。
+  {
+    const found: string[] = [];
+    for (const q of own) {
+      if (/本文|教本|この節/.test(q.question)) {
+        found.push(`問題 ${q.id}: 設問が教本の記載そのものを指している（「${q.question.slice(0, 24)}…」）`);
+      }
+    }
+    warnGroup('教材内の記載を探させる設問になっている。知識を問う形にすること', found);
   }
 }
 
