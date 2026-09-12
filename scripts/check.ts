@@ -257,6 +257,115 @@ for (const q of QUESTIONS) {
   q.choices.forEach((c) => checkMath(`問題 ${q.id}`, c));
 }
 
+// ---- 問題の作りの偏り ----
+// 型でもデータの整合でもなく「問題として成立しているか」を見る。
+// fe_exam_app / g_exam_app で先に入れた検査を、あとから移植したもの。
+//
+// **このアプリでは、200 問すべての正解が「ア」だった。**
+// 選択肢を描く ChoiceList は並び順どおりに出すので、「ア」を選ぶだけで
+// 全問正解できる状態だった。数え上げていれば初日に気づけたはずのもの。
+
+/** 同じ型の注意が大量に出ると全部読み飛ばされるので、多いときはまとめる */
+function warnGroup(label: string, items: string[], show = 10): void {
+  if (items.length === 0) return;
+  if (items.length <= show) {
+    items.forEach(warn);
+    return;
+  }
+  warn(`${label}（${items.length} 件。ひどい順に ${show} 件だけ表示）`);
+  items.slice(0, show).forEach((m) => warn('    ' + m));
+}
+
+{
+  // 出典のある問題は原文どおり収録するもので、こちらでは直せない。直せないものを
+  // 警告してはいけない（警告そのものが読み飛ばされるようになる）。
+  const own = QUESTIONS.filter((q) => q.source === undefined);
+
+  // 正解の位置。四肢択一なので、散っていれば各 25% 前後になる。
+  {
+    const count = [0, 0, 0, 0];
+    for (const q of own) if (q.answer >= 0 && q.answer <= 3) count[q.answer] += 1;
+    const label = ['ア', 'イ', 'ウ', 'エ'];
+    for (let i = 0; i < 4; i += 1) {
+      const ratio = count[i] / Math.max(1, own.length);
+      if (ratio > 0.32 || ratio < 0.18) {
+        warn(
+          `正解の位置が ${label[i]} に偏っている（自作 ${count[i]} / ${own.length} 問 = ` +
+            `${Math.round(ratio * 100)}%）。選択肢を並べ替えて散らすこと。` +
+            `ただし数値が昇順に並んでいる問題は並べ替えない`,
+        );
+      }
+    }
+  }
+
+  // 正解だけが長いと、読まずに「長いものを選ぶ」で当てられる。
+  // 数式は 1 文字ぶんに潰してから数える（$\frac{1}{2}$ は見た目には短い）。
+  {
+    const width = (s: string): number => s.replace(/\$[^$]*\$/g, '#').replace(/\s/g, '').length;
+    const found: { diff: number; msg: string }[] = [];
+    for (const q of own) {
+      if (q.choices.length !== 4) continue;
+      const lens = q.choices.map(width);
+      const other = Math.max(...lens.filter((_, i) => i !== q.answer));
+      const mine = lens[q.answer];
+      if (mine >= other * 1.3 && mine - other >= 6) {
+        found.push({ diff: mine - other, msg: `問題 ${q.id}: 正解 ${mine} 字 / 最長の誤答 ${other} 字` });
+      }
+    }
+    found.sort((a, b) => b.diff - a.diff);
+    warnGroup('正解だけが突出して長い。誤答も同じ密度で書くこと', found.map((f) => f.msg));
+  }
+
+  // 「必ず」「常に」が誤答にしか出てこないと、それ自体が手掛かりになる。
+  {
+    const absolute = /必ず|すべて|常に|まったく|一切|絶対|例外なく|いかなる場合|どのような場合|一律/;
+    const found: string[] = [];
+    for (const q of own) {
+      if (q.choices.length !== 4) continue;
+      const wrongAllHave = q.choices.every((c, i) => i === q.answer || absolute.test(c));
+      if (wrongAllHave && !absolute.test(q.choices[q.answer])) {
+        found.push(`問題 ${q.id}: 誤答 3 つすべてに言い切りがあり、正解にはない`);
+      }
+    }
+    warnGroup('言い切りが誤答側にだけ出ている', found);
+  }
+}
+
+// 節をまたいだ重複は、1 節ずつ見ている限り気づけないので機械に数えさせる。
+// 問題文だけで測ると「〜として、適切なものはどれか」の定型が効いて全部似るため、
+// 選択肢も混ぜて測る。同じ節の中で似るのは対比のために対で作った問題なので正常。
+{
+  const grams = (q: (typeof QUESTIONS)[number]): Set<string> => {
+    const t = (q.question + [...q.choices].sort().join('')).replace(
+      /[\s。、，,．.「」『』（）()]/g,
+      '',
+    );
+    const set = new Set<string>();
+    for (let i = 0; i < t.length - 1; i += 1) set.add(t.slice(i, i + 2));
+    return set;
+  };
+  const rows = QUESTIONS.map((q) => ({ q, g: grams(q) }));
+  const found: string[] = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    for (let j = i + 1; j < rows.length; j += 1) {
+      if (rows[i].q.source !== undefined && rows[j].q.source !== undefined) continue;
+      const a = rows[i].g;
+      const b = rows[j].g;
+      let hit = 0;
+      a.forEach((g) => {
+        if (b.has(g)) hit += 1;
+      });
+      const sim = (2 * hit) / (a.size + b.size);
+      const sameSection =
+        rows[i].q.sectionId !== undefined && rows[i].q.sectionId === rows[j].q.sectionId;
+      if (sim >= 0.6 && !sameSection) {
+        found.push(`${rows[i].q.id} と ${rows[j].q.id} が別の節でほぼ同じ内容（類似度 ${sim.toFixed(2)}）`);
+      }
+    }
+  }
+  warnGroup('別の節にほぼ同じ問題がある。片方の数値か観点を変える', found);
+}
+
 // ---- 実際に描いてみる ----
 // 記法としては正しくても、描くと崩れている場合がある（強調の中の数式など）。
 for (const p of renderCheck()) err(p);
